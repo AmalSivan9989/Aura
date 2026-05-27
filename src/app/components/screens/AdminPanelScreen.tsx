@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -28,6 +28,7 @@ import {
   DialogTrigger,
 } from "../ui/dialog";
 import { Progress } from "../ui/progress";
+import { api } from "../utils/api";
 import { 
   Search, 
   Filter,
@@ -50,56 +51,26 @@ import {
 import { motion } from "motion/react";
 import { toast } from "sonner";
 
-const trainings = [
-  {
-    id: 1,
-    name: "Leadership Skills Workshop",
-    trainer: "Dr. Sarah Mitchell",
-    batch: "Batch A",
-    startDate: "2026-05-15",
-    endDate: "2026-05-20",
-    participants: 32,
-    completed: 28,
-    pending: 4,
-    status: "active",
-  },
-  {
-    id: 2,
-    name: "Advanced Sales Techniques",
-    trainer: "Mike Johnson",
-    batch: "Batch B",
-    startDate: "2026-05-10",
-    endDate: "2026-05-18",
-    participants: 28,
-    completed: 28,
-    pending: 0,
-    status: "completed",
-  },
-  {
-    id: 3,
-    name: "Customer Service Excellence",
-    trainer: "Emma Wilson",
-    batch: "Batch C",
-    startDate: "2026-05-22",
-    endDate: "2026-05-28",
-    participants: 35,
-    completed: 12,
-    pending: 23,
-    status: "active",
-  },
-  {
-    id: 4,
-    name: "Technical Training Q2",
-    trainer: "James Chen",
-    batch: "Batch D",
-    startDate: "2026-06-01",
-    endDate: "2026-06-10",
-    participants: 40,
-    completed: 0,
-    pending: 40,
-    status: "upcoming",
-  },
-];
+
+
+interface Training {
+  id: number;
+  name: string;
+  trainer: string;
+  batch: string;
+  startDate: string;
+  endDate: string;
+  participants: number;
+  completed: number;
+  pending: number;
+  status: string;
+}
+
+
+
+
+
+
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -130,7 +101,33 @@ const getStatusIcon = (status: string) => {
 export function AdminPanelScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [selectedTraining, setSelectedTraining] = useState<typeof trainings[0] | null>(null);
+  const [trainings, setTrainings] = useState<Training[]>([]);
+  const [selectedTraining, setSelectedTraining] = useState<Training | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch trainings from API
+  useEffect(() => {
+    async function fetchTrainings() {
+      try {
+        const data = await api.get<Training[]>("/trainings");
+        setTrainings(data);
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchTrainings();
+  }, []);
+
+  // Loading and error UI
+  if (loading) {
+    return <div className="p-6">Loading trainings...</div>;
+  }
+  if (error) {
+    return <div className="p-6 text-red-500">Error: {error}</div>;
+  }
 
   const filteredTrainings = trainings.filter((training) => {
     const matchesSearch = training.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
