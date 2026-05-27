@@ -136,13 +136,51 @@ export function AdminPanelScreen() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleSendReminder = () => {
-    toast.success("Reminders sent successfully!");
+  const handleSendReminder = async (programId: number) => {
+    try {
+      const response = await api.post<{ message: string }>(`/programs/${programId}/reminder`, {});
+      toast.success(response.message || "Reminder sent successfully!");
+    } catch (e: any) {
+      toast.error(e.message || "Failed to send reminder.");
+    }
+  };
+
+  const handleSendReminderToAllPending = async () => {
+    // For bulk actions, trigger reminder for all active programs that have pending feedback
+    const activePrograms = trainings.filter(t => t.status === "active" && t.pending > 0);
+    if (activePrograms.length === 0) {
+      toast.info("No active programs with pending feedback.");
+      return;
+    }
+    
+    let successCount = 0;
+    for (const prog of activePrograms) {
+      try {
+        await api.post(`/programs/${prog.id}/reminder`, {});
+        successCount++;
+      } catch (e) {
+        console.error(`Failed to send reminder for program ${prog.id}`, e);
+      }
+    }
+    toast.success(`Dispatched reminders for ${successCount} programs!`);
   };
 
   const handleExport = () => {
-    toast.success("Export started! Download will begin shortly.");
+    // Export live data in JSON format dynamically
+    try {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(trainings, null, 2));
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", "training_programs_report.json");
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      toast.success("Export started! Download will begin shortly.");
+    } catch (e: any) {
+      toast.error("Failed to export data.");
+    }
   };
+
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
@@ -183,7 +221,7 @@ export function AdminPanelScreen() {
                 <Button
                   variant="outline"
                   className="w-full justify-start rounded-xl"
-                  onClick={handleSendReminder}
+                  onClick={handleSendReminderToAllPending}
                 >
                   <Send className="w-4 h-4 mr-2" />
                   Send Reminder to All Pending
@@ -423,7 +461,7 @@ export function AdminPanelScreen() {
                               <Eye className="w-4 h-4 mr-2" />
                               View Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={handleSendReminder}>
+                            <DropdownMenuItem onClick={() => handleSendReminder(training.id)}>
                               <Send className="w-4 h-4 mr-2" />
                               Send Reminder
                             </DropdownMenuItem>
@@ -517,7 +555,11 @@ export function AdminPanelScreen() {
               Close
             </Button>
             <Button 
-              onClick={handleSendReminder}
+              onClick={() => {
+                if (selectedTraining) {
+                  handleSendReminder(selectedTraining.id);
+                }
+              }}
               className="rounded-xl bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] hover:opacity-90"
             >
               <Send className="w-4 h-4 mr-2" />
