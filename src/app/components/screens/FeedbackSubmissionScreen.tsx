@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import { Progress } from "../ui/progress";
@@ -10,6 +9,25 @@ import { Slider } from "../ui/slider";
 import { Save, Send, Star } from "lucide-react";
 import { motion } from "motion/react";
 import { toast } from "sonner";
+import { api } from "../utils/api";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
+
+interface PendingProgram {
+  enrollment_id: number;
+  program_id: number;
+  program_name: string;
+  trainer_name: string;
+  batch: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+}
 
 const ratingCategories = [
   { id: "content", label: "Content Quality", description: "Relevance and depth of material" },
@@ -27,22 +45,119 @@ export function FeedbackSubmissionScreen() {
     pace: 4,
     interaction: 5,
   });
-  const [feedback, setFeedback] = useState("");
-  const [progress] = useState(65);
+  const [pendingPrograms, setPendingPrograms] = useState<PendingProgram[]>([]);
+  const [selectedProgramId, setSelectedProgramId] = useState<string>("");
+  const [strengths, setStrengths] = useState("");
+  const [improvements, setImprovements] = useState("");
+  const [general, setGeneral] = useState("");
+  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchPending() {
+      try {
+        const response = await api.get<PendingProgram[]>("/feedback/pending");
+        setPendingPrograms(response);
+        if (response.length > 0) {
+          setSelectedProgramId(String(response[0].program_id));
+        }
+      } catch (err: any) {
+        setError(err.message || "Failed to load pending courses");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchPending();
+  }, []);
 
   const handleRatingChange = (category: string, value: number[]) => {
     setRatings({ ...ratings, [category]: value[0] });
   };
 
-  const handleSaveDraft = () => {
-    toast.success("Draft saved successfully!");
+  const handleSaveDraft = async () => {
+    if (!selectedProgramId) {
+      toast.error("Please select a training program first.");
+      return;
+    }
+    try {
+      await api.post("/feedback", {
+        program_id: Number(selectedProgramId),
+        rating_content: ratings.content,
+        rating_delivery: ratings.delivery,
+        rating_materials: ratings.materials,
+        rating_pace: ratings.pace,
+        rating_interaction: ratings.interaction,
+        strengths,
+        improvements,
+        general,
+        is_anonymous: isAnonymous,
+        is_draft: true,
+      });
+      toast.success("Draft saved successfully!");
+    } catch (e: any) {
+      toast.error(e.message || "Failed to save draft.");
+    }
   };
 
-  const handleSubmit = () => {
-    toast.success("Feedback submitted successfully!");
+  const handleSubmit = async () => {
+    if (!selectedProgramId) {
+      toast.error("Please select a training program first.");
+      return;
+    }
+    try {
+      await api.post("/feedback", {
+        program_id: Number(selectedProgramId),
+        rating_content: ratings.content,
+        rating_delivery: ratings.delivery,
+        rating_materials: ratings.materials,
+        rating_pace: ratings.pace,
+        rating_interaction: ratings.interaction,
+        strengths,
+        improvements,
+        general,
+        is_anonymous: isAnonymous,
+        is_draft: false,
+      });
+      toast.success("Feedback submitted successfully!");
+      // Filter out the submitted program
+      setPendingPrograms(pendingPrograms.filter(p => String(p.program_id) !== selectedProgramId));
+      if (pendingPrograms.length > 1) {
+        const remaining = pendingPrograms.filter(p => String(p.program_id) !== selectedProgramId);
+        setSelectedProgramId(String(remaining[0].program_id));
+      } else {
+        setSelectedProgramId("");
+      }
+      setStrengths("");
+      setImprovements("");
+      setGeneral("");
+    } catch (e: any) {
+      toast.error(e.message || "Failed to submit feedback.");
+    }
   };
 
   const averageRating = Object.values(ratings).reduce((a, b) => a + b, 0) / Object.values(ratings).length;
+
+  if (loading) {
+    return <div className="p-6">Loading active training details...</div>;
+  }
+
+  if (error) {
+    return <div className="p-6 text-red-500">Error: {error}</div>;
+  }
+
+  if (pendingPrograms.length === 0) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto space-y-6">
+        <h2 className="text-2xl font-semibold text-foreground">Submit Training Feedback</h2>
+        <Card className="rounded-xl border-border shadow-sm p-8 text-center text-muted-foreground">
+          You do not have any pending training programs to evaluate at this time. 🎉
+        </Card>
+      </div>
+    );
+  }
+
+  const selectedProg = pendingPrograms.find(p => String(p.program_id) === selectedProgramId);
 
   return (
     <div className="p-6 space-y-6 max-w-4xl mx-auto">
@@ -56,35 +171,46 @@ export function FeedbackSubmissionScreen() {
         </p>
       </div>
 
-      {/* Progress Indicator */}
+      {/* Program Selector */}
       <Card className="rounded-xl border-border shadow-sm">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-foreground">
-              Completion Progress
-            </span>
-            <span className="text-sm text-muted-foreground">{progress}%</span>
-          </div>
-          <Progress value={progress} className="h-2" />
+        <CardHeader>
+          <CardTitle>Select Training Program</CardTitle>
+          <CardDescription>Select which course you are providing feedback for</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Select value={selectedProgramId} onValueChange={setSelectedProgramId}>
+            <SelectTrigger className="w-full rounded-xl h-11">
+              <SelectValue placeholder="Choose a training program" />
+            </SelectTrigger>
+            <SelectContent>
+              {pendingPrograms.map((p) => (
+                <SelectItem key={p.program_id} value={String(p.program_id)}>
+                  {p.program_name} ({p.batch})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </CardContent>
       </Card>
 
       {/* Training Details */}
-      <Card className="rounded-xl border-border shadow-sm">
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle>Leadership Skills Workshop</CardTitle>
-              <CardDescription className="mt-2">
-                Trainer: Dr. Sarah Mitchell • Date: May 15, 2026 • Duration: 4 hours
-              </CardDescription>
+      {selectedProg && (
+        <Card className="rounded-xl border-border shadow-sm">
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle>{selectedProg.program_name}</CardTitle>
+                <CardDescription className="mt-2">
+                  Trainer: {selectedProg.trainer_name} • Batch: {selectedProg.batch} • Period: {new Date(selectedProg.start_date).toLocaleDateString()} to {new Date(selectedProg.end_date).toLocaleDateString()}
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20">
+                {selectedProg.status.toUpperCase()}
+              </Badge>
             </div>
-            <Badge variant="outline" className="bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20">
-              Active
-            </Badge>
-          </div>
-        </CardHeader>
-      </Card>
+          </CardHeader>
+        </Card>
+      )}
 
       {/* Rating Categories */}
       <motion.div
@@ -191,6 +317,8 @@ export function FeedbackSubmissionScreen() {
               <Textarea
                 id="strengths"
                 placeholder="Describe the strongest aspects of this training session..."
+                value={strengths}
+                onChange={(e) => setStrengths(e.target.value)}
                 className="min-h-[100px] rounded-xl resize-none"
               />
             </div>
@@ -200,6 +328,8 @@ export function FeedbackSubmissionScreen() {
               <Textarea
                 id="improvements"
                 placeholder="Share your suggestions for improvement..."
+                value={improvements}
+                onChange={(e) => setImprovements(e.target.value)}
                 className="min-h-[100px] rounded-xl resize-none"
               />
             </div>
@@ -209,12 +339,12 @@ export function FeedbackSubmissionScreen() {
               <Textarea
                 id="general"
                 placeholder="Any other thoughts or feedback..."
-                value={feedback}
-                onChange={(e) => setFeedback(e.target.value)}
+                value={general}
+                onChange={(e) => setGeneral(e.target.value)}
                 className="min-h-[120px] rounded-xl resize-none"
               />
               <p className="text-xs text-muted-foreground">
-                {feedback.length} / 1000 characters
+                {general.length} / 1000 characters
               </p>
             </div>
           </CardContent>

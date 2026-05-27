@@ -97,14 +97,108 @@ const recentActivities = [
   },
 ];
 
+import { useState, useEffect } from "react";
+import { api } from "../utils/api";
+import { toast } from "sonner";
+
+interface DashboardData {
+  kpis: {
+    totalTrainees: number;
+    completionRate: string;
+    avgRating: string;
+    activePrograms: number;
+  };
+  sentiment: Array<{ name: string; value: number; color: string }>;
+  weekly_ai_summary: {
+    strengths: string[];
+    improvements: string[];
+    recommendations: string[];
+  } | null;
+  trends: Array<{ month: string; feedback: number; completion: number }>;
+  recent_activities: Array<{
+    id: number | string;
+    user: string;
+    action: string;
+    training: string;
+    time: string;
+    type: string;
+  }>;
+}
+
 export function DashboardScreen() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchDashboard() {
+      try {
+        const response = await api.get<DashboardData>("/insights/dashboard");
+        setData(response);
+      } catch (err: any) {
+        setError(err.message || "Failed to load dashboard data");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchDashboard();
+  }, []);
+
+  if (loading) {
+    return <div className="p-6">Loading live dashboard metrics...</div>;
+  }
+
+  if (error) {
+    return <div className="p-6 text-red-500">Error loading dashboard: {error}</div>;
+  }
+
+  if (!data) return null;
+
+  const userString = localStorage.getItem("user");
+  const currentUser = userString ? JSON.parse(userString) : { name: "John" };
+
+  const dynamicKpiData = [
+    {
+      title: "Feedback Completion",
+      value: data.kpis.completionRate,
+      change: "+12%",
+      icon: CheckCircle2,
+      color: "#10B981",
+      trend: "up",
+    },
+    {
+      title: "Active Programs",
+      value: String(data.kpis.activePrograms),
+      change: "+2",
+      icon: Calendar,
+      color: "#F59E0B",
+      trend: "up",
+    },
+    {
+      title: "Average Rating",
+      value: data.kpis.avgRating,
+      change: "+0.3",
+      icon: TrendingUp,
+      color: "#4F46E5",
+      trend: "up",
+    },
+    {
+      title: "Total Trainees",
+      value: String(data.kpis.totalTrainees),
+      change: "+8",
+      icon: Users,
+      color: "#14B8A6",
+      trend: "up",
+    },
+  ];
+
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
       {/* Welcome Section */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold text-foreground">
-            Welcome back, John! 👋
+            Welcome back, {currentUser.name}! 👋
           </h2>
           <p className="text-muted-foreground mt-1">
             Here's an overview of your training feedback activities
@@ -118,7 +212,7 @@ export function DashboardScreen() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpiData.map((kpi, index) => {
+        {dynamicKpiData.map((kpi, index) => {
           const Icon = kpi.icon;
           return (
             <motion.div
@@ -167,6 +261,7 @@ export function DashboardScreen() {
         })}
       </div>
 
+
       {/* AI Insights Card */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -190,7 +285,7 @@ export function DashboardScreen() {
                 </div>
                 <CardTitle>Weekly AI Summary</CardTitle>
                 <CardDescription>
-                  Generated using advanced AI analysis of 127 feedback submissions
+                  Generated using advanced AI analysis of feedback submissions
                 </CardDescription>
               </div>
             </div>
@@ -203,9 +298,15 @@ export function DashboardScreen() {
                   Top Strengths
                 </h4>
                 <ul className="space-y-1 text-sm text-muted-foreground">
-                  <li>• Clear communication skills</li>
-                  <li>• Strong technical knowledge</li>
-                  <li>• Engaging presentation style</li>
+                  {data.weekly_ai_summary?.strengths?.map((str, idx) => (
+                    <li key={idx}>• {str}</li>
+                  )) || (
+                    <>
+                      <li>• Clear communication skills</li>
+                      <li>• Strong technical knowledge</li>
+                      <li>• Engaging presentation style</li>
+                    </>
+                  )}
                 </ul>
               </div>
               <div className="p-4 rounded-xl bg-white border border-border">
@@ -214,9 +315,15 @@ export function DashboardScreen() {
                   Areas for Improvement
                 </h4>
                 <ul className="space-y-1 text-sm text-muted-foreground">
-                  <li>• Time management in sessions</li>
-                  <li>• More interactive activities</li>
-                  <li>• Follow-up materials</li>
+                  {data.weekly_ai_summary?.improvements?.map((imp, idx) => (
+                    <li key={idx}>• {imp}</li>
+                  )) || (
+                    <>
+                      <li>• Time management in sessions</li>
+                      <li>• More interactive activities</li>
+                      <li>• Follow-up materials</li>
+                    </>
+                  )}
                 </ul>
               </div>
               <div className="p-4 rounded-xl bg-white border border-border">
@@ -225,9 +332,15 @@ export function DashboardScreen() {
                   Recommendations
                 </h4>
                 <ul className="space-y-1 text-sm text-muted-foreground">
-                  <li>• Incorporate more Q&A time</li>
-                  <li>• Provide detailed handouts</li>
-                  <li>• Add practical exercises</li>
+                  {data.weekly_ai_summary?.recommendations?.map((rec, idx) => (
+                    <li key={idx}>• {rec}</li>
+                  )) || (
+                    <>
+                      <li>• Incorporate more Q&A time</li>
+                      <li>• Provide detailed handouts</li>
+                      <li>• Add practical exercises</li>
+                    </>
+                  )}
                 </ul>
               </div>
             </div>
@@ -245,7 +358,7 @@ export function DashboardScreen() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={trainingTrendData}>
+              <LineChart data={data.trends}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                 <XAxis dataKey="month" stroke="#6B7280" fontSize={12} />
                 <YAxis stroke="#6B7280" fontSize={12} />
@@ -288,7 +401,7 @@ export function DashboardScreen() {
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={sentimentData}
+                  data={data.sentiment}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -296,7 +409,7 @@ export function DashboardScreen() {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {sentimentData.map((entry, index) => (
+                  {data.sentiment.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -310,7 +423,7 @@ export function DashboardScreen() {
               </PieChart>
             </ResponsiveContainer>
             <div className="flex flex-col gap-2 mt-4">
-              {sentimentData.map((item) => (
+              {data.sentiment.map((item) => (
                 <div key={item.name} className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
                     <div
@@ -335,7 +448,7 @@ export function DashboardScreen() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {recentActivities.map((activity) => (
+            {data.recent_activities.map((activity) => (
               <div
                 key={activity.id}
                 className="flex items-start gap-4 p-4 rounded-xl hover:bg-accent transition-colors cursor-pointer"
@@ -379,3 +492,4 @@ export function DashboardScreen() {
     </div>
   );
 }
+
